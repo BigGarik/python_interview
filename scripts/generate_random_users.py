@@ -2,7 +2,7 @@ import asyncio
 import csv
 import os
 import random
-import uuid
+import itertools
 from faker import Faker
 from asyncio import Lock
 
@@ -20,10 +20,13 @@ faker = Faker('ru_RU')
 lock = Lock()
 total_written = 0
 
+user_id_counter = itertools.count(1)
+
+
 # ==== Генерация одной записи ====
 def generate_user():
     return {
-        'ID': str(uuid.uuid4()),
+        'ID': next(user_id_counter),
         'First Name': faker.first_name(),
         'Last Name': faker.last_name(),
         'Patronymic': faker.middle_name(),

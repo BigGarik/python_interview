@@ -3,13 +3,14 @@ import threading
 
 import uvicorn
 import multiprocessing
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from app.ml_model import __process_ml_score
 from app.models import UserScoreRequest
 from app.reports import generate_big_report
 from app.sms import send_notifications
-from app.storage import db_1_get_user_contracts, db_2_save_user_contracts, file_db_save_contracts_report
+from app.storage import db_1_get_user_contracts, db_2_save_user_contracts, file_db_save_contracts_report, \
+    find_user_in_csv
 
 app = FastAPI()
 
@@ -53,6 +54,29 @@ async def post_user_score_count(data: UserScoreRequest):
     app.state.counted_scores[data.user_id] = score
 
     return {"status": True, 'score': score}
+
+
+@app.get("/user/info/{user_id}")
+async def get_user_info(user_id: int):
+    """
+    Возвращает информацию о пользователе по его ID и рассчитанный score.
+
+    :param user_id: ID пользователя (int)
+    :return: JSON с полями пользователя и его score
+    """
+    # 1. Проверка наличия score
+    if user_id not in app.state.counted_scores:
+        raise HTTPException(status_code=404, detail="Score not found for user")
+
+    # 2. Поиск пользователя в users.csv
+    user_data = find_user_in_csv(user_id, "../users.csv")
+    if not user_data:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 3. Добавляем score к результату
+    user_data['score'] = app.state.counted_scores[user_id]
+
+    return user_data
 
 
 def __process_server(queue_ml_request, queue_ml_response, counted_scores):
