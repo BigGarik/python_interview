@@ -64,16 +64,16 @@ async def get_user_info(user_id: int):
     :param user_id: ID пользователя (int)
     :return: JSON с полями пользователя и его score
     """
-    # 1. Проверка наличия score
-    if user_id not in app.state.counted_scores:
-        raise HTTPException(status_code=404, detail="Score not found for user")
+    if user_id <= 0:
+        raise HTTPException(status_code=400, detail="Неверный ID пользователя")
 
-    # 2. Поиск пользователя в users.csv
-    user_data = find_user_in_csv(user_id, "../users.csv")
+    user_data = await asyncio.to_thread(find_user_in_csv, user_id, "../scripts/users.csv")
     if not user_data:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-    # 3. Добавляем score к результату
+    if user_id not in app.state.counted_scores:
+        raise HTTPException(status_code=404, detail="Score не найден")
+
     user_data['score'] = app.state.counted_scores[user_id]
 
     return user_data

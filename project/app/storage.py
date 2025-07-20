@@ -46,7 +46,7 @@ async def file_db_save_contracts_report(path: str) -> None:
     await asyncio.sleep(0.05)
 
 
-def find_user_in_csv(user_id: int, csv_path: str = "users.csv"):
+def find_user_in_csv(user_id: int, csv_path: str = "scripts/users.csv") -> dict | None:
     """
     Ищет пользователя по ID в большом CSV-файле, не загружая файл в память.
 
@@ -54,7 +54,7 @@ def find_user_in_csv(user_id: int, csv_path: str = "users.csv"):
     :param csv_path: путь до файла
     :return: dict с данными пользователя или None
     """
-    with open(csv_path, encoding="utf-8") as f:
+    with open(csv_path) as f:
         reader = csv.DictReader(f)
         for row in reader:
             try:
