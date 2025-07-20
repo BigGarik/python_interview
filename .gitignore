@@ -1,2 +1,3 @@
 venv
 scripts/users.csv
+/scripts/users.idx
