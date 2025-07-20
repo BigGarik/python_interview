@@ -1,4 +1,5 @@
 import asyncio
+import threading
 
 import uvicorn
 import multiprocessing
@@ -11,7 +12,6 @@ from app.sms import send_notifications
 from app.storage import db_1_get_user_contracts, db_2_save_user_contracts, file_db_save_contracts_report
 
 app = FastAPI()
-COUNTED_SCORES = {}
 
 
 @app.post("/user/score/count")    # почему post
@@ -35,17 +35,21 @@ async def post_user_score_count(data: UserScoreRequest):
     ml_data['contracts'] = contracts
     app.state.queue_ml_request.put(ml_data)
     score = app.state.queue_ml_response.get()
-    big_report_task = asyncio.create_task(generate_big_report(data.user_id, contracts))
-    save_user_contracts_task = asyncio.create_task(db_2_save_user_contracts(data.user_id, contracts))
-    # report_path = await generate_big_report(data.user_id, contracts)
 
-    report_path, _ = await asyncio.gather(big_report_task, save_user_contracts_task)
-    await file_db_save_contracts_report(report_path)
-    # await db_2_save_user_contracts(data.user_id, contracts)
+    report_path, _ = await asyncio.gather(
+        generate_big_report(data.user_id, contracts),
+        db_2_save_user_contracts(data.user_id, contracts)
+    )
 
-    send_notifications(data.user_id, report_path, score)   # ждем 3 секунды надо асинк
+    asyncio.create_task(file_db_save_contracts_report(report_path))
 
-    # COUNTED_SCORES[data.user_id] = score
+    # в отдельном потоке
+    threading.Thread(
+        target=send_notifications,
+        args=(data.user_id, report_path, score),
+        daemon=True
+    ).start()
+
     app.state.counted_scores[data.user_id] = score
 
     return {"status": True, 'score': score}
@@ -77,7 +81,7 @@ def main():
     ml_ops_proc = [
         multiprocessing.Process(
             target=__process_ml_score, args=(queue_ml_request, queue_ml_response), daemon=True
-        ) for _ in range(multiprocessing.cpu_count() - 2)
+        ) for _ in range(multiprocessing.cpu_count() - 3)
     ]
 
     server_proc.start()
