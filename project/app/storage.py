@@ -1,5 +1,5 @@
 import asyncio
-import csv
+import pickle
 import random
 import time
 from typing import List
@@ -46,20 +46,38 @@ async def file_db_save_contracts_report(path: str) -> None:
     await asyncio.sleep(0.05)
 
 
-def find_user_in_csv(user_id: int, csv_path: str = "scripts/users.csv") -> dict | None:
-    """
-    Ищет пользователя по ID в большом CSV-файле, не загружая файл в память.
-
-    :param user_id: int, искомый ID пользователя
-    :param csv_path: путь до файла
-    :return: dict с данными пользователя или None
-    """
-    with open(csv_path) as f:
-        reader = csv.DictReader(f)
-        for row in reader:
+def build_user_id_index(csv_path: str, index_path: str):
+    index = {}
+    with open(csv_path, 'r', encoding='utf-8') as f:
+        header = f.readline()
+        pos = f.tell()
+        while True:
+            line = f.readline()
+            if not line:
+                break
+            offset = pos
+            pos = f.tell()
             try:
-                if int(row['ID']) == user_id:
-                    return row
-            except (ValueError, KeyError):
+                user_id = int(line.split(',')[0])
+                index[user_id] = offset
+            except (ValueError, IndexError):
                 continue
-    return None
+    # Сохраняем индекс на диск
+    with open(index_path, 'wb') as idx_file:
+        pickle.dump(index, idx_file, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def find_user_by_index(user_id: int, csv_path: str, index_path: str) -> dict | None:
+    with open(index_path, 'rb') as idx_file:
+        index = pickle.load(idx_file)
+    offset = index.get(user_id)
+    if offset is None:
+        return None
+    with open(csv_path, 'r', encoding='utf-8') as f:
+        header = f.readline().strip().split(',')
+        f.seek(offset)
+        line = f.readline()
+        if not line:
+            return None
+        fields = line.strip().split(',')
+        return dict(zip(header, fields))

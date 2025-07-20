@@ -1,5 +1,7 @@
 import asyncio
+import os
 import threading
+import time
 
 import uvicorn
 import multiprocessing
@@ -10,7 +12,11 @@ from app.models import UserScoreRequest
 from app.reports import generate_big_report
 from app.sms import send_notifications
 from app.storage import db_1_get_user_contracts, db_2_save_user_contracts, file_db_save_contracts_report, \
-    find_user_in_csv
+    build_user_id_index, find_user_by_index
+
+# Пути к основному CSV-файлу и индексу
+USERS_CSV_PATH = "../scripts/users.csv"
+USERS_IDX_PATH = "../scripts/users.idx"
 
 app = FastAPI()
 
@@ -31,6 +37,7 @@ async def post_user_score_count(data: UserScoreRequest):
     :return: Статус успешной обработки. Результат (N)
     """
     # TODO: Найти потенциальные проблемы, оптимизировать. Текущее время работы ~4.82с
+    start = time.monotonic()
     contracts = db_1_get_user_contracts(data.user_id)
     ml_data = data.model_dump()
     ml_data['contracts'] = contracts
@@ -53,6 +60,7 @@ async def post_user_score_count(data: UserScoreRequest):
 
     app.state.counted_scores[data.user_id] = score
 
+    print(f"[POST /user/score/count] Выполнено за {time.monotonic() - start:.3f} сек")
     return {"status": True, 'score': score}
 
 
@@ -64,10 +72,11 @@ async def get_user_info(user_id: int):
     :param user_id: ID пользователя (int)
     :return: JSON с полями пользователя и его score
     """
+    start = time.monotonic()
     if user_id <= 0:
         raise HTTPException(status_code=400, detail="Неверный ID пользователя")
 
-    user_data = await asyncio.to_thread(find_user_in_csv, user_id, "../scripts/users.csv")
+    user_data = await asyncio.to_thread(find_user_by_index, user_id, USERS_CSV_PATH, USERS_IDX_PATH)
     if not user_data:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
 
@@ -76,6 +85,7 @@ async def get_user_info(user_id: int):
 
     user_data['score'] = app.state.counted_scores[user_id]
 
+    print(f"[GET /user/info/{user_id}] Выполнено за {time.monotonic() - start:.3f} сек")
     return user_data
 
 
@@ -97,6 +107,10 @@ def main():
     queue_ml_request = manager.Queue()
     queue_ml_response = manager.Queue()
     counted_scores = manager.dict()
+
+    # Строим индекс только если он не существует
+    if not os.path.exists(USERS_IDX_PATH):
+        build_user_id_index(USERS_CSV_PATH, USERS_IDX_PATH)
 
     # Процесс сервера
     server_proc = multiprocessing.Process(target=__process_server, args=(queue_ml_request, queue_ml_response, counted_scores))
