@@ -1,3 +1,5 @@
+import asyncio
+
 import uvicorn
 import multiprocessing
 from fastapi import FastAPI
@@ -33,12 +35,11 @@ async def post_user_score_count(data: UserScoreRequest):
     ml_data['contracts'] = contracts
     app.state.queue_ml_request.put(ml_data)
     score = app.state.queue_ml_response.get()
-    task1 = acincio.create_task(generate_big_report(data.user_id, contracts))
-    task2 = asyncio.create_task(db_2_save_user_contracts(data.user_id, contracts))
+    big_report_task = asyncio.create_task(generate_big_report(data.user_id, contracts))
+    save_user_contracts_task = asyncio.create_task(db_2_save_user_contracts(data.user_id, contracts))
     # report_path = await generate_big_report(data.user_id, contracts)
 
-    await acincio.gather(task1, task2)
-    report_path = task1.result()
+    report_path, _ = await asyncio.gather(big_report_task, save_user_contracts_task)
     await file_db_save_contracts_report(report_path)
     # await db_2_save_user_contracts(data.user_id, contracts)
 
