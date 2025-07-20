@@ -44,12 +44,14 @@ async def post_user_score_count(data: UserScoreRequest):
     # await db_2_save_user_contracts(data.user_id, contracts)
 
     send_notifications(data.user_id, report_path, score)   # ждем 3 секунды надо асинк
-    COUNTED_SCORES[data.user_id] = score
+
+    # COUNTED_SCORES[data.user_id] = score
+    app.state.counted_scores[data.user_id] = score
 
     return {"status": True, 'score': score}
 
 
-def __process_server(queue_ml_request, queue_ml_response):
+def __process_server(queue_ml_request, queue_ml_response, counted_scores):
     """Функция запуска сервера на FastAPI.
 
     :param queue_ml_request: Очередь запроса в ML модель.
@@ -57,6 +59,7 @@ def __process_server(queue_ml_request, queue_ml_response):
     """
     app.state.queue_ml_request = queue_ml_request
     app.state.queue_ml_response = queue_ml_response
+    app.state.counted_scores = counted_scores
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
@@ -65,9 +68,10 @@ def main():
     manager = multiprocessing.Manager()
     queue_ml_request = manager.Queue()
     queue_ml_response = manager.Queue()
+    counted_scores = manager.dict()
 
     # Процесс сервера
-    server_proc = multiprocessing.Process(target=__process_server, args=(queue_ml_request, queue_ml_response))
+    server_proc = multiprocessing.Process(target=__process_server, args=(queue_ml_request, queue_ml_response, counted_scores))
 
     # Процессы ML моделей для расчета (N)
     ml_ops_proc = [
