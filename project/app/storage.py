@@ -1,4 +1,6 @@
 import asyncio
+import csv
+import os
 import pickle
 import random
 import time
@@ -46,38 +48,89 @@ async def file_db_save_contracts_report(path: str) -> None:
     await asyncio.sleep(0.05)
 
 
-def build_user_id_index(csv_path: str, index_path: str):
-    index = {}
-    with open(csv_path, 'r', encoding='utf-8') as f:
-        header = f.readline()
-        pos = f.tell()
-        while True:
-            line = f.readline()
-            if not line:
-                break
-            offset = pos
-            pos = f.tell()
-            try:
-                user_id = int(line.split(',')[0])
-                index[user_id] = offset
-            except (ValueError, IndexError):
-                continue
-    # Сохраняем индекс на диск
-    with open(index_path, 'wb') as idx_file:
-        pickle.dump(index, idx_file, protocol=pickle.HIGHEST_PROTOCOL)
-
-
 def find_user_by_index(user_id: int, csv_path: str, index_path: str) -> dict | None:
+    """Находит пользователя по ID используя индекс"""
     with open(index_path, 'rb') as idx_file:
         index = pickle.load(idx_file)
+
     offset = index.get(user_id)
     if offset is None:
         return None
+
     with open(csv_path, 'r', encoding='utf-8') as f:
-        header = f.readline().strip().split(',')
+        header_line = f.readline().strip()
+        header = next(csv.reader([header_line]))
+
         f.seek(offset)
-        line = f.readline()
+
+        line = f.readline().strip()
         if not line:
             return None
-        fields = line.strip().split(',')
-        return dict(zip(header, fields))
+
+        try:
+            fields = next(csv.reader([line]))
+            return dict(zip(header, fields))
+        except (StopIteration, csv.Error):
+            return None
+
+
+def build_user_id_index(csv_path: str, index_path: str):
+    """Индексирование с отображением прогресса"""
+    index = {}
+    file_size = os.path.getsize(csv_path)
+    BUFFER_SIZE = 128 * 1024 * 1024  # 128 МБ
+
+    start_time = time.time()
+    bytes_processed = 0
+
+    with open(csv_path, 'rb') as f:
+        f.readline()
+        file_pos = f.tell()
+        remainder = b''
+
+        while True:
+            chunk = f.read(BUFFER_SIZE)
+            if not chunk:
+                break
+
+            bytes_processed += len(chunk)
+
+            data = remainder + chunk
+            last_newline = data.rfind(b'\n')
+
+            if last_newline == -1:
+                remainder = data
+                continue
+
+            pos = 0
+            while pos < last_newline:
+                line_end = data.find(b'\n', pos)
+                if line_end == -1 or line_end > last_newline:
+                    break
+
+                comma_pos = data.find(b',', pos, line_end)
+                if comma_pos > pos:
+                    try:
+                        user_id = int(data[pos:comma_pos])
+                        index[user_id] = file_pos
+                    except ValueError:
+                        pass
+
+                line_length = line_end - pos + 1
+                file_pos += line_length
+                pos = line_end + 1
+
+            remainder = data[last_newline + 1:]
+
+            progress = bytes_processed / file_size * 100
+            speed = bytes_processed / (1024 ** 2) / (time.time() - start_time)
+            print(f"\rПрогресс: {progress:.1f}% | Скорость: {speed:.1f} МБ/с | Записей: {len(index)}", end='')
+
+    print(f"\n\nИндексация завершена за {time.time() - start_time:.1f} сек")
+
+    with open(index_path, 'wb') as f:
+        pickle.dump(index, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+if __name__ == '__main__':
+    build_user_id_index('../../scripts/users.csv', '../../scripts/users.idx')
