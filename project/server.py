@@ -11,12 +11,14 @@ from app.ml_model import __process_ml_score
 from app.models import UserScoreRequest
 from app.reports import generate_big_report
 from app.sms import send_notifications
+from pathlib import Path
 from app.storage import db_1_get_user_contracts, db_2_save_user_contracts, file_db_save_contracts_report, \
     build_user_id_index, find_user_by_index
 
 # Пути к основному CSV-файлу и индексу
-USERS_CSV_PATH = "../scripts/users.csv"
-USERS_IDX_PATH = "../scripts/users.idx"
+BASE_DIR = Path(__file__).resolve().parent.parent
+USERS_CSV_PATH = str(BASE_DIR / "scripts" / "users.csv")
+USERS_IDX_PATH = str(BASE_DIR / "scripts" / "users.idx")
 
 app = FastAPI()
 
@@ -73,7 +75,7 @@ async def get_user_info(user_id: int):
     :return: JSON с полями пользователя и его score
     """
     start = time.monotonic()
-    if user_id <= 0:
+    if user_id < 100:
         raise HTTPException(status_code=400, detail="Неверный ID пользователя")
 
     user_data = await asyncio.to_thread(find_user_by_index, user_id, USERS_CSV_PATH, USERS_IDX_PATH)

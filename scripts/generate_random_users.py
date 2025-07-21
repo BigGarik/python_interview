@@ -20,7 +20,7 @@ faker = Faker('ru_RU')
 lock = Lock()
 total_written = 0
 
-user_id_counter = itertools.count(1)
+user_id_counter = itertools.count(100)
 
 
 # ==== Генерация одной записи ====
