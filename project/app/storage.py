@@ -57,13 +57,12 @@ def find_user_by_index(user_id: int, csv_path: str, index_path: str) -> dict | N
     if offset is None:
         return None
 
-    with open(csv_path, 'r', encoding='utf-8') as f:
-        header_line = f.readline().strip()
+    with open(csv_path, 'rb') as f:
+        header_line = f.readline().decode('utf-8').strip()
         header = next(csv.reader([header_line]))
 
         f.seek(offset)
-
-        line = f.readline().strip()
+        line = f.readline().decode('utf-8').strip()
         if not line:
             return None
 
